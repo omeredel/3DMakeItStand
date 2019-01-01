@@ -1,5 +1,6 @@
 import json
 import random as rand
+
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
@@ -19,7 +20,7 @@ def getXYZArrFromJsonFile():
     return xyzArr
 
 
-def get_XYZ_array__from_XYZ_file(fileName='3DFiles/stl_quad.xyz'):
+def get_XYZ_array_from_XYZ_file(fileName='3DFiles/stl_quad.xyz'):
     xyzArr = []
     with open(fileName) as xyzFile:
         for line in xyzFile:
@@ -178,10 +179,10 @@ def find_shell(mat):
     return edges
 
 
-def write_xyz(file_name, data):
+def write_xyz(file_name, data, print_all=False):
     with open(file_name, "w+") as shell:
         for row in data:
-            if row[3] == 1:
+            if print_all or row[3] == 1:
                 shell.write("%d %d %d\n" % (row[0], row[1], row[2]))
 
 
@@ -216,17 +217,21 @@ def distance_from_plane(planes_cof, point):
 
 
 def doTheThing():
-    xyz = get_XYZ_array__from_XYZ_file("3DFiles/extruder.xyz")
+    item_name = "stl_quad"
+    xyz = get_XYZ_array_from_XYZ_file("3DFiles/Inputs/" + item_name + ".xyz")
 
-    edges = list(find_shell(np.array(xyz)))
-    write_xyz("edges.xyz", edges)
+    # edges = list(find_shell(np.array(xyz)))
+    # write_xyz("3DFiles/Outputs/stl_top_edges.xyz", edges)
 
     balance_point = calculate_balance_point(np.array(xyz))
     print(balance_point)
-
-    # xyz = optimizeCenterOfMass(xyz, [45, 11])
     center_of_mass = calculate_center_of_mass(xyz)
     print(center_of_mass)
+
+    write_xyz("3DFiles/Outputs/" + item_name + "_com_and_balance_points.xyz", [balance_point, center_of_mass],
+              print_all=True)
+
+    # xyz = optimizeCenterOfMass(xyz, [45, 11])
 
 
 # createOFFFile(xyz)
