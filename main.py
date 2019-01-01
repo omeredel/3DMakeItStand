@@ -19,7 +19,7 @@ def getXYZArrFromJsonFile():
     return xyzArr
 
 
-def getXYZArrFromXYZFile(fileName='3DFiles/stl_quad.xyz'):
+def get_XYZ_array__from_XYZ_file(fileName='3DFiles/stl_quad.xyz'):
     xyzArr = []
     with open(fileName) as xyzFile:
         for line in xyzFile:
@@ -28,14 +28,14 @@ def getXYZArrFromXYZFile(fileName='3DFiles/stl_quad.xyz'):
     return xyzArr
 
 
-def calculateCenterOfMass(xs, ys, zs):
+def average_axes(xs, ys, zs):
     x = np.average(xs)
     y = np.average(ys)
     z = np.average(zs)
     return x, y, z
 
 
-def displayResult(xCom, xs, yCom, ys, zCom, zs):
+def display_result_in_matplotlib(xCom, xs, yCom, ys, zCom, zs):
     fig = plt.figure()
     ax = Axes3D(fig)
     ax.scatter(xs, ys, zs)
@@ -43,9 +43,9 @@ def displayResult(xCom, xs, yCom, ys, zCom, zs):
     plt.show()
 
 
-def optimizeCenterOfMass(xyz, reqXY, res=2):
+def old_optimizeCenterOfMass(xyz, reqXY, res=2):
     xs, ys, zs = extractAxesFromMatrix(xyz)
-    xCom, yCom, _ = calculateCenterOfMass(xs, ys, zs)
+    xCom, yCom, _ = average_axes(xs, ys, zs)
     stop = 0
     while (abs(xCom - reqXY[0]) > res) or (abs(yCom - reqXY[1]) > res):
         for i in range(1000):
@@ -55,7 +55,7 @@ def optimizeCenterOfMass(xyz, reqXY, res=2):
         stop += 1
         if stop == 10: break
         xs, ys, zs = extractAxesFromMatrix(xyz)
-        xCom, yCom, _ = calculateCenterOfMass(xs, ys, zs)
+        xCom, yCom, _ = average_axes(xs, ys, zs)
     print("Stopped at:", stop)
     return xyz
 
@@ -74,11 +74,9 @@ def createOFFFile(xyz):
 
 
 def createCoMFile(xCom, yCom, zCom):
-    with open('CoM.off', "w+") as offFile:
-        offFile.write("OFF\n")
-        offFile.write("1 0 0\n")
+    with open('CoM.xyz', "w+") as comFile:
         string1 = str(xCom) + " " + str(yCom) + " " + str(zCom)
-        offFile.write(string1)
+        comFile.write(string1)
 
 
 # the same function for x
@@ -90,14 +88,14 @@ def find_shell_x(mat, y, z):
     temp = temp[temp[:, 2] == z, :]
 
     for row in temp:
-        if (last_x == None):
+        if last_x is None:
             x_edges.add((row[0], y, z, 1))
-        elif ((last_x + 1) < row[0]):
+        elif (last_x + 1) < row[0]:
             x_edges.add((row[0], y, z, 1))
             x_edges.add((last_x, y, z, 1))
         last_x = row[0]
 
-    if last_x != None:
+    if last_x is not None:
         x_edges.add((last_x, y, z, 1))
 
     return x_edges
@@ -112,14 +110,14 @@ def find_shell_y(mat, x, z):
     temp = temp[temp[:, 2] == z, :]
 
     for row in temp:
-        if (last_y == None):
+        if last_y is None:
             y_edges.add((x, row[1], z, 1))
-        elif ((last_y + 1) < row[1]):
+        elif (last_y + 1) < row[1]:
             y_edges.add((x, row[1], z, 1))
             y_edges.add((x, last_y, z, 1))
         last_y = row[1]
 
-    if last_y != None:
+    if last_y is not None:
         y_edges.add((x, last_y, z, 1))
 
     return y_edges
@@ -134,14 +132,14 @@ def find_shell_z(mat, x, y):
     temp = temp[temp[:, 1] == y, :]
 
     for row in temp:
-        if (last_z == None):
+        if last_z is None:
             z_edges.add((x, y, row[2], 1))
-        elif ((last_z + 1) < row[2]):
+        elif (last_z + 1) < row[2]:
             z_edges.add((x, y, row[2], 1))
             z_edges.add((x, y, last_z, 1))
         last_z = row[2]
 
-    if last_z != None:
+    if last_z is not None:
         z_edges.add((x, y, last_z, 1))
     return z_edges
 
@@ -188,7 +186,7 @@ def write_xyz(file_name, data):
 
 
 def calculate_balance_point(mat):
-    # all the points with the lowest y value
+    # all the points with the lowest Z value
     z_min = mat[mat[:, 2].argsort()][0][2]
     temp = mat[mat[:, 2] == z_min, :]
 
@@ -197,7 +195,7 @@ def calculate_balance_point(mat):
 
 def calculate_center_of_mass(mat):
     xs, ys, zs = extractAxesFromMatrix(mat)
-    center_of_mass = calculateCenterOfMass(xs, ys, zs)
+    center_of_mass = average_axes(xs, ys, zs)
 
     return center_of_mass
 
@@ -218,10 +216,10 @@ def distance_from_plane(planes_cof, point):
 
 
 def doTheThing():
-    xyz = getXYZArrFromXYZFile("3DFiles/extruder.xyz")
+    xyz = get_XYZ_array__from_XYZ_file("3DFiles/extruder.xyz")
 
-    # edges = list(find_shell(np.array(xyz)))
-    # write_xyz("edges.xyz", edges)
+    edges = list(find_shell(np.array(xyz)))
+    write_xyz("edges.xyz", edges)
 
     balance_point = calculate_balance_point(np.array(xyz))
     print(balance_point)
@@ -238,7 +236,7 @@ def doTheThing():
 
 # displayResult(xCom, xs, yCom, ys, zCom, zs)  #to display in matplot
 
-# bad name! this function extract from the struct the voxels that weren't "deleted"
+# Extract the voxels that weren't "deleted" from the struct
 def extractAxesFromMatrix(xyz):
     xs = [lst[0] for lst in xyz if lst[3]]
     ys = [lst[1] for lst in xyz if lst[3]]
