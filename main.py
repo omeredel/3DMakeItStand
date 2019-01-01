@@ -4,11 +4,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 
-#How to run the STL2Voxel script:  python stltovoxel.py ./Quadcopter.stl ./stl_quad.xyz
+
+# How to run the STL2Voxel script:  python stltovoxel.py ./Quadcopter.stl ./stl_quad.xyz
 
 def getXYZArrFromJsonFile():
     xyzArr = []
-    with open('3DFiles\\torus.json') as jsonFile:
+    with open('3DFiles/torus.json') as jsonFile:
         jsonData = json.load(jsonFile)
         for vox in jsonData["voxels"]:
             for i in range(10):
@@ -17,12 +18,13 @@ def getXYZArrFromJsonFile():
                     xyzArr.append(point)
     return xyzArr
 
-def getXYZArrFromXYZFile(fileName=None):
+
+def getXYZArrFromXYZFile(fileName='3DFiles/stl_quad.xyz'):
     xyzArr = []
-    with open('3DFiles\\stl_quad.xyz') as xyzFile:
+    with open(fileName) as xyzFile:
         for line in xyzFile:
             row = line.split()
-            xyzArr.append([int(row[0]),int(row[1]),int(row[2]),1])
+            xyzArr.append([int(row[0]), int(row[1]), int(row[2]), 1])
     return xyzArr
 
 
@@ -63,7 +65,7 @@ def createOFFFile(xyz):
         offFile.write("OFF\n")
         c = 0
         for lst in xyz:
-            if lst[3]: c+=1
+            if lst[3]: c += 1
         offFile.write(str(c) + " 0 0\n")
         for point in xyz:
             if point[3]:
@@ -79,22 +81,169 @@ def createCoMFile(xCom, yCom, zCom):
         offFile.write(string1)
 
 
+# the same function for x
+def find_shell_x(mat, y, z):
+    last_x = None
+    x_edges = set()
+
+    temp = mat[mat[:, 1] == y, :]
+    temp = temp[temp[:, 2] == z, :]
+
+    for row in temp:
+        if (last_x == None):
+            x_edges.add((row[0], y, z, 1))
+        elif ((last_x + 1) < row[0]):
+            x_edges.add((row[0], y, z, 1))
+            x_edges.add((last_x, y, z, 1))
+        last_x = row[0]
+
+    if last_x != None:
+        x_edges.add((last_x, y, z, 1))
+
+    return x_edges
+
+
+# the same function for y
+def find_shell_y(mat, x, z):
+    last_y = None
+    y_edges = set()
+
+    temp = mat[mat[:, 0] == x, :]
+    temp = temp[temp[:, 2] == z, :]
+
+    for row in temp:
+        if (last_y == None):
+            y_edges.add((x, row[1], z, 1))
+        elif ((last_y + 1) < row[1]):
+            y_edges.add((x, row[1], z, 1))
+            y_edges.add((x, last_y, z, 1))
+        last_y = row[1]
+
+    if last_y != None:
+        y_edges.add((x, last_y, z, 1))
+
+    return y_edges
+
+
+# the same function once z
+def find_shell_z(mat, x, y):
+    last_z = None
+    z_edges = set()
+
+    temp = mat[mat[:, 0] == x, :]
+    temp = temp[temp[:, 1] == y, :]
+
+    for row in temp:
+        if (last_z == None):
+            z_edges.add((x, y, row[2], 1))
+        elif ((last_z + 1) < row[2]):
+            z_edges.add((x, y, row[2], 1))
+            z_edges.add((x, y, last_z, 1))
+        last_z = row[2]
+
+    if last_z != None:
+        z_edges.add((x, y, last_z, 1))
+    return z_edges
+
+
+def find_shell(mat):
+    edges = set()
+
+    temp_x = mat[mat[:, 0].argsort()]
+    x_min = temp_x[0][0]
+    x_max = temp_x[-1][0]
+
+    temp_y = mat[mat[:, 1].argsort()]
+    y_min = temp_y[0][1]
+    y_max = temp_y[-1][1]
+
+    temp_z = mat[mat[:, 2].argsort()]
+    z_min = temp_z[0][2]
+    z_max = temp_z[-1][2]
+
+    for y in range(y_min, y_max + 1):
+        for z in range(z_min, z_max + 1):
+            edges = edges.union(find_shell_x(temp_x, y, z))
+    print(".")
+
+    for x in range(x_min, x_max + 1):
+        for z in range(z_min, z_max + 1):
+            edges = edges.union(find_shell_y(temp_y, x, z))
+
+    print(".")
+
+    for x in range(x_min, x_max + 1):
+        for y in range(y_min, y_max + 1):
+            edges = edges.union(find_shell_z(temp_z, x, y))
+
+    print(".")
+    return edges
+
+
+def write_xyz(file_name, data):
+    with open(file_name, "w+") as shell:
+        for row in data:
+            if row[3] == 1:
+                shell.write("%d %d %d\n" % (row[0], row[1], row[2]))
+
+
+def calculate_balance_point(mat):
+    # all the points with the lowest y value
+    z_min = mat[mat[:, 2].argsort()][0][2]
+    temp = mat[mat[:, 2] == z_min, :]
+
+    return calculate_center_of_mass(list(temp))
+
+
+def calculate_center_of_mass(mat):
+    xs, ys, zs = extractAxesFromMatrix(mat)
+    center_of_mass = calculateCenterOfMass(xs, ys, zs)
+
+    return center_of_mass
+
+
+def calculate_cutting_plane(center_of_mass, balance_point):
+    a = center_of_mass - balance_point
+    a[2] = 0
+    return a
+
+
+def distance_from_plane(planes_cof, point):
+    extend = np.array([point[0], point[1], point[2], 1])
+    length_cof = np.sqrt(np.pow(planes_cof[0], 2), np.pow(planes_cof[1], 2), np.pow(planes_cof[2], 2))
+
+    dot_point = planes_cof.dot(extend)
+
+    return np.abs(dot_point) / length_cof
+
+
 def doTheThing():
-    xyz = getXYZArrFromXYZFile(None)
-    xyz = optimizeCenterOfMass(xyz, [45, 11])
-    xs, ys, zs = extractAxesFromMatrix(xyz)
-    xCom, yCom, zCom = calculateCenterOfMass(xs, ys, zs)
-    createOFFFile(xyz)
-    createCoMFile(xCom, yCom, zCom)
-    print(xCom,yCom,zCom)
+    xyz = getXYZArrFromXYZFile("3DFiles/extruder.xyz")
 
-    # displayResult(xCom, xs, yCom, ys, zCom, zs)  to display in matplot
+    # edges = list(find_shell(np.array(xyz)))
+    # write_xyz("edges.xyz", edges)
+
+    balance_point = calculate_balance_point(np.array(xyz))
+    print(balance_point)
+
+    # xyz = optimizeCenterOfMass(xyz, [45, 11])
+    center_of_mass = calculate_center_of_mass(xyz)
+    print(center_of_mass)
 
 
+# createOFFFile(xyz)
+# createCoMFile(xCom, yCom, zCom)
+
+# "3DFiles/stl_top.xyz"
+
+# displayResult(xCom, xs, yCom, ys, zCom, zs)  #to display in matplot
+
+# bad name! this function extract from the struct the voxels that weren't "deleted"
 def extractAxesFromMatrix(xyz):
     xs = [lst[0] for lst in xyz if lst[3]]
     ys = [lst[1] for lst in xyz if lst[3]]
     zs = [lst[2] for lst in xyz if lst[3]]
+    # temp = xyz[xyz[:,3]==1,:]
     return xs, ys, zs
 
 
