@@ -1,5 +1,7 @@
 import json
+import math
 import random as rand
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -200,36 +202,96 @@ def calculate_center_of_mass(mat):
 
     return center_of_mass
 
+def update_center_of_mass(center_of_mass, values_to_decrease, axis_updated_len):
+    for axis in range(3):
+        center_of_mass[axis] *= axis_updated_len+1
+        center_of_mass[axis] -= values_to_decrease[axis]
+        center_of_mass[axis] /= axis_updated_len
+    return center_of_mass
 
 def calculate_cutting_plane(center_of_mass, balance_point):
-    a = center_of_mass - balance_point
-    a[2] = 0
-    return a
+    planes_coefs = np.subtract(center_of_mass, balance_point)
+    planes_coefs[2] = 0
+    planes_coefs_D = np.dot(planes_coefs, balance_point)
+    planes_coefs_final = [0, 0, 0, 0]
+    planes_coefs_final[:2] = planes_coefs[:2]
+    planes_coefs_final[3] = -planes_coefs_D
+    print("Center of mass: ", center_of_mass, "\nBalance point: ", balance_point, "\nCutting Plane coefs: ",
+          planes_coefs_final)
+    return planes_coefs_final
 
 
-def distance_from_plane(planes_cof, point):
-    extend = np.array([point[0], point[1], point[2], 1])
-    length_cof = np.sqrt(np.pow(planes_cof[0], 2), np.pow(planes_cof[1], 2), np.pow(planes_cof[2], 2))
+def distance_from_plane(planes_coefs, point):
+    # extended_point = np.array([point[0], point[1], point[2], 1])
+    length_coef = math.sqrt(math.pow(planes_coefs[0], 2) + math.pow(planes_coefs[1], 2) + math.pow(planes_coefs[2], 2))
 
-    dot_point = planes_cof.dot(extend)
+    dot_point = (planes_coefs[0] * point[0]) + (planes_coefs[1] * point[1]) + (planes_coefs[2] * point[2]) + \
+                planes_coefs[3]
 
-    return np.abs(dot_point) / length_cof
+    return dot_point / length_coef
+
+
+def get_Ecom(current_com, balance_point, values_to_decrease, axis_updated_len):
+    current_com = update_center_of_mass(current_com, values_to_decrease, axis_updated_len)
+    return np.linalg.norm(np.subtract(current_com[:2], balance_point[:2])), current_com
+
+
+def remove_some_points(sorted_xyz, edges, balance_point, starting_com,planes_coefs):
+    edges_array = []
+    for edge in edges:
+        edges_array.append([e for e in edge])
+    counter = 0
+    current_com = [axis for axis in starting_com]
+    min_Ecom = sys.maxsize
+    xyzs_on_voxels_len = len(sorted_xyz)
+    for point_index in range(len(sorted_xyz)):
+        if sorted_xyz[point_index] not in edges_array:
+            sorted_xyz[point_index][3] = 0
+            xyzs_on_voxels_len -= 1
+            current_Ecom, current_com = get_Ecom(current_com, balance_point, sorted_xyz[point_index], xyzs_on_voxels_len)
+            if current_Ecom > min_Ecom:
+                sorted_xyz[point_index][3] = 1
+                print("Stopped because of ecom")
+                break
+            else:
+                min_Ecom = current_Ecom
+            counter += 1
+        if counter%3000 == 0 and counter != 0:
+            print(counter)
+        if counter > len(sorted_xyz)/2:
+            print("Stopped because of number of deletions")
+            break
+    print(min_Ecom)
+    return sorted_xyz,current_com
+
+
+def optimize_center_of_mass(xyz, center_of_mass, balance_point, edges):
+    planes_coefs = calculate_cutting_plane(center_of_mass, balance_point);
+    sorted_xyz = sorted(xyz, key=lambda point: distance_from_plane(planes_coefs, point), reverse=True)
+    return remove_some_points(sorted_xyz, edges, balance_point, center_of_mass,planes_coefs)
+    # print(sorted_xyz[0], sorted_xyz[40000], sorted_xyz[-1])
+    # print(distance_from_plane(planes_coefs, sorted_xyz[0]), distance_from_plane(planes_coefs, sorted_xyz[40000]),
+    #       distance_from_plane(planes_coefs, sorted_xyz[-1]))
 
 
 def doTheThing():
-    item_name = "stl_quad"
+    item_name = "extruder"
     xyz = get_XYZ_array_from_XYZ_file("3DFiles/Inputs/" + item_name + ".xyz")
 
-    # edges = list(find_shell(np.array(xyz)))
-    # write_xyz("3DFiles/Outputs/stl_top_edges.xyz", edges)
+    edges = list(find_shell(np.array(xyz)))
+    write_xyz("3DFiles/Outputs/" + item_name + "_edges.xyz", edges)
 
     balance_point = calculate_balance_point(np.array(xyz))
     print(balance_point)
     center_of_mass = calculate_center_of_mass(xyz)
-    print(center_of_mass)
+    print("Before optimizing: ", center_of_mass)
+
+    optimized_xyz, center_of_mass = optimize_center_of_mass(xyz, center_of_mass, balance_point, edges)
+    print("After optimizing: ", center_of_mass)
 
     write_xyz("3DFiles/Outputs/" + item_name + "_com_and_balance_points.xyz", [balance_point, center_of_mass],
               print_all=True)
+    write_xyz("3DFiles/Outputs/" + item_name + "_test.xyz", optimized_xyz)
 
     # xyz = optimizeCenterOfMass(xyz, [45, 11])
 
