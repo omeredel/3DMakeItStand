@@ -202,12 +202,14 @@ def calculate_center_of_mass(mat):
 
     return center_of_mass
 
+
 def update_center_of_mass(center_of_mass, values_to_decrease, axis_updated_len):
     for axis in range(3):
-        center_of_mass[axis] *= axis_updated_len+1
+        center_of_mass[axis] *= axis_updated_len + 1
         center_of_mass[axis] -= values_to_decrease[axis]
         center_of_mass[axis] /= axis_updated_len
     return center_of_mass
+
 
 def calculate_cutting_plane(center_of_mass, balance_point):
     planes_coefs = np.subtract(center_of_mass, balance_point)
@@ -236,7 +238,7 @@ def get_Ecom(current_com, balance_point, values_to_decrease, axis_updated_len):
     return np.linalg.norm(np.subtract(current_com[:2], balance_point[:2])), current_com
 
 
-def remove_some_points(sorted_xyz, edges, balance_point, starting_com,planes_coefs):
+def remove_some_points(sorted_xyz, edges, balance_point, starting_com, step=10):
     edges_array = []
     for edge in edges:
         edges_array.append([e for e in edge])
@@ -244,11 +246,16 @@ def remove_some_points(sorted_xyz, edges, balance_point, starting_com,planes_coe
     current_com = [axis for axis in starting_com]
     min_Ecom = sys.maxsize
     xyzs_on_voxels_len = len(sorted_xyz)
-    for point_index in range(len(sorted_xyz)):
+    for point_index in range(0, len(sorted_xyz), step):
         if sorted_xyz[point_index] not in edges_array:
-            sorted_xyz[point_index][3] = 0
-            xyzs_on_voxels_len -= 1
-            current_Ecom, current_com = get_Ecom(current_com, balance_point, sorted_xyz[point_index], xyzs_on_voxels_len)
+            points_sum = [0, 0, 0]
+            for i in range(step):
+                sorted_xyz[point_index + i][3] = 0
+                points_sum[0] += sorted_xyz[point_index + i][0]
+                points_sum[1] += sorted_xyz[point_index + i][1]
+                points_sum[2] += sorted_xyz[point_index + i][2]
+            xyzs_on_voxels_len -= step
+            current_Ecom, current_com = get_Ecom(current_com, balance_point, points_sum, xyzs_on_voxels_len)
             if current_Ecom > min_Ecom:
                 sorted_xyz[point_index][3] = 1
                 print("Stopped because of ecom")
@@ -256,19 +263,19 @@ def remove_some_points(sorted_xyz, edges, balance_point, starting_com,planes_coe
             else:
                 min_Ecom = current_Ecom
             counter += 1
-        if counter%3000 == 0 and counter != 0:
+        if counter % 3000 == 0 and counter != 0:
             print(counter)
-        if counter > len(sorted_xyz)/2:
+        if counter > len(sorted_xyz) / 2:
             print("Stopped because of number of deletions")
             break
     print(min_Ecom)
-    return sorted_xyz,current_com
+    return sorted_xyz, current_com
 
 
 def optimize_center_of_mass(xyz, center_of_mass, balance_point, edges):
     planes_coefs = calculate_cutting_plane(center_of_mass, balance_point);
     sorted_xyz = sorted(xyz, key=lambda point: distance_from_plane(planes_coefs, point), reverse=True)
-    return remove_some_points(sorted_xyz, edges, balance_point, center_of_mass,planes_coefs)
+    return remove_some_points(sorted_xyz, edges, balance_point, center_of_mass)
     # print(sorted_xyz[0], sorted_xyz[40000], sorted_xyz[-1])
     # print(distance_from_plane(planes_coefs, sorted_xyz[0]), distance_from_plane(planes_coefs, sorted_xyz[40000]),
     #       distance_from_plane(planes_coefs, sorted_xyz[-1]))
