@@ -1,7 +1,9 @@
+import copy
 import json
 import math
 import random as rand
 import sys
+import time
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -165,19 +167,17 @@ def find_shell(mat):
     for y in range(y_min, y_max + 1):
         for z in range(z_min, z_max + 1):
             edges = edges.union(find_shell_x(temp_x, y, z))
-    print(".")
+    print("Finished X edges")
 
     for x in range(x_min, x_max + 1):
         for z in range(z_min, z_max + 1):
             edges = edges.union(find_shell_y(temp_y, x, z))
-
-    print(".")
+    print("Finished Y edges")
 
     for x in range(x_min, x_max + 1):
         for y in range(y_min, y_max + 1):
             edges = edges.union(find_shell_z(temp_z, x, y))
-
-    print(".")
+    print("Finished Z edges")
     return edges
 
 
@@ -224,12 +224,9 @@ def calculate_cutting_plane(center_of_mass, balance_point):
 
 
 def distance_from_plane(planes_coefs, point):
-    # extended_point = np.array([point[0], point[1], point[2], 1])
     length_coef = math.sqrt(math.pow(planes_coefs[0], 2) + math.pow(planes_coefs[1], 2) + math.pow(planes_coefs[2], 2))
-
     dot_point = (planes_coefs[0] * point[0]) + (planes_coefs[1] * point[1]) + (planes_coefs[2] * point[2]) + \
                 planes_coefs[3]
-
     return dot_point / length_coef
 
 
@@ -238,47 +235,46 @@ def get_Ecom(current_com, balance_point, values_to_decrease, axis_updated_len):
     return np.linalg.norm(np.subtract(current_com[:2], balance_point[:2])), current_com
 
 
-def remove_some_points(sorted_xyz, edges, balance_point, starting_com, step=10):
+def remove_some_points(sorted_xyz, edges, balance_point, starting_com):
     edges_array = []
     for edge in edges:
         edges_array.append([e for e in edge])
     counter = 0
     current_com = [axis for axis in starting_com]
+    best_com = []
     min_Ecom = sys.maxsize
-    xyzs_on_voxels_len = len(sorted_xyz)
-    for point_index in range(0, len(sorted_xyz), step):
+    xyz_updating_len = len(sorted_xyz)
+    best_alpha = copy.deepcopy(sorted_xyz)
+    flag = False
+    for point_index in range(len(sorted_xyz)):
         if sorted_xyz[point_index] not in edges_array:
-            points_sum = [0, 0, 0]
-            for i in range(step):
-                sorted_xyz[point_index + i][3] = 0
-                points_sum[0] += sorted_xyz[point_index + i][0]
-                points_sum[1] += sorted_xyz[point_index + i][1]
-                points_sum[2] += sorted_xyz[point_index + i][2]
-            xyzs_on_voxels_len -= step
-            current_Ecom, current_com = get_Ecom(current_com, balance_point, points_sum, xyzs_on_voxels_len)
-            if current_Ecom > min_Ecom:
-                sorted_xyz[point_index][3] = 1
-                print("Stopped because of ecom")
-                break
-            else:
+            sorted_xyz[point_index][3] = 0
+            xyz_updating_len -= 1
+            current_Ecom, current_com = get_Ecom(current_com, balance_point, sorted_xyz[point_index], xyz_updating_len)
+            if current_Ecom < min_Ecom:
+                last_point_index = point_index
+                best_com = current_com[:]
                 min_Ecom = current_Ecom
+                flag = True
+            elif current_Ecom > min_Ecom and flag:
+                sorted_xyz[last_point_index][3] = 1
+                flag = False
+                best_alpha[:last_point_index + 1] = sorted_xyz[:last_point_index + 1]
+                print("Saving best alpha")
             counter += 1
-        if counter % 3000 == 0 and counter != 0:
-            print(counter)
-        if counter > len(sorted_xyz) / 2:
+            if counter % 3000 == 0 and counter != 0:
+                print(counter, "Ecom is: ", current_Ecom)
+        if counter > len(sorted_xyz) / 1.5:
             print("Stopped because of number of deletions")
             break
-    print(min_Ecom)
-    return sorted_xyz, current_com
+    print("Final Ecom: ", min_Ecom)
+    return sorted_xyz, best_com, best_alpha
 
 
 def optimize_center_of_mass(xyz, center_of_mass, balance_point, edges):
     planes_coefs = calculate_cutting_plane(center_of_mass, balance_point);
     sorted_xyz = sorted(xyz, key=lambda point: distance_from_plane(planes_coefs, point), reverse=True)
     return remove_some_points(sorted_xyz, edges, balance_point, center_of_mass)
-    # print(sorted_xyz[0], sorted_xyz[40000], sorted_xyz[-1])
-    # print(distance_from_plane(planes_coefs, sorted_xyz[0]), distance_from_plane(planes_coefs, sorted_xyz[40000]),
-    #       distance_from_plane(planes_coefs, sorted_xyz[-1]))
 
 
 def doTheThing():
@@ -289,16 +285,21 @@ def doTheThing():
     write_xyz("3DFiles/Outputs/" + item_name + "_edges.xyz", edges)
 
     balance_point = calculate_balance_point(np.array(xyz))
-    print(balance_point)
     center_of_mass = calculate_center_of_mass(xyz)
     print("Before optimizing: ", center_of_mass)
 
-    optimized_xyz, center_of_mass = optimize_center_of_mass(xyz, center_of_mass, balance_point, edges)
-    print("After optimizing: ", center_of_mass)
+    start_time = time.time()
+    optimized_xyz, best_com, best_alpha = optimize_center_of_mass(xyz, center_of_mass, balance_point, edges)
+    end_time = time.time()
+    print("After optimizing: ", best_com)
 
-    write_xyz("3DFiles/Outputs/" + item_name + "_com_and_balance_points.xyz", [balance_point, center_of_mass],
+    print("Optimizing Alphas took: ", end_time - start_time, "seconds")
+
+    write_xyz("3DFiles/Outputs/" + item_name + "_com_and_balance_points.xyz", [balance_point, best_com],
               print_all=True)
-    write_xyz("3DFiles/Outputs/" + item_name + "_test.xyz", optimized_xyz)
+    write_xyz("3DFiles/Outputs/" + item_name + "_final.xyz", optimized_xyz)
+
+    write_xyz("3DFiles/Outputs/" + item_name + "_best_alpha.xyz", best_alpha)
 
     # xyz = optimizeCenterOfMass(xyz, [45, 11])
 
