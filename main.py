@@ -1,16 +1,21 @@
 import copy
 import json
 import math
-import random as rand
 import sys
 import time
 
-import matplotlib.pyplot as plt
 import numpy as np
-from mpl_toolkits.mplot3d import Axes3D
 
 
 # How to run the STL2Voxel script:  python stltovoxel.py ./Quadcopter.stl ./stl_quad.xyz
+
+# Extract the voxels that weren't "deleted" from the struct
+def extractAxesFromMatrix(xyz):
+    xs = [lst[0] for lst in xyz if lst[3]]
+    ys = [lst[1] for lst in xyz if lst[3]]
+    zs = [lst[2] for lst in xyz if lst[3]]
+    return xs, ys, zs
+
 
 def getXYZArrFromJsonFile():
     xyzArr = []
@@ -24,7 +29,7 @@ def getXYZArrFromJsonFile():
     return xyzArr
 
 
-def get_XYZ_array_from_XYZ_file(fileName='3DFiles/stl_quad.xyz'):
+def get_XYZ_array_from_XYZ_file(fileName):
     xyzArr = []
     with open(fileName) as xyzFile:
         for line in xyzFile:
@@ -38,50 +43,6 @@ def average_axes(xs, ys, zs):
     y = np.average(ys)
     z = np.average(zs)
     return x, y, z
-
-
-def display_result_in_matplotlib(xCom, xs, yCom, ys, zCom, zs):
-    fig = plt.figure()
-    ax = Axes3D(fig)
-    ax.scatter(xs, ys, zs)
-    ax.scatter(xCom, yCom, zCom, c="Black")
-    plt.show()
-
-
-def old_optimizeCenterOfMass(xyz, reqXY, res=2):
-    xs, ys, zs = extractAxesFromMatrix(xyz)
-    xCom, yCom, _ = average_axes(xs, ys, zs)
-    stop = 0
-    while (abs(xCom - reqXY[0]) > res) or (abs(yCom - reqXY[1]) > res):
-        for i in range(1000):
-            xyz.sort()
-            t = rand.randrange(len(xyz) // 2, len(xyz))
-            xyz[t][3] = 0
-        stop += 1
-        if stop == 10: break
-        xs, ys, zs = extractAxesFromMatrix(xyz)
-        xCom, yCom, _ = average_axes(xs, ys, zs)
-    print("Stopped at:", stop)
-    return xyz
-
-
-def createOFFFile(xyz):
-    with open('test.off', "w+") as offFile:
-        offFile.write("OFF\n")
-        c = 0
-        for lst in xyz:
-            if lst[3]: c += 1
-        offFile.write(str(c) + " 0 0\n")
-        for point in xyz:
-            if point[3]:
-                strPoint = str(point[0]) + " " + str(point[1]) + " " + str(point[2]) + "\n"
-                offFile.write(strPoint)
-
-
-def createCoMFile(xCom, yCom, zCom):
-    with open('CoM.xyz', "w+") as comFile:
-        string1 = str(xCom) + " " + str(yCom) + " " + str(zCom)
-        comFile.write(string1)
 
 
 # the same function for x
@@ -167,17 +128,17 @@ def find_shell(mat):
     for y in range(y_min, y_max + 1):
         for z in range(z_min, z_max + 1):
             edges = edges.union(find_shell_x(temp_x, y, z))
-    print("Finished X edges")
+    print("Finished finding X edges")
 
     for x in range(x_min, x_max + 1):
         for z in range(z_min, z_max + 1):
             edges = edges.union(find_shell_y(temp_y, x, z))
-    print("Finished Y edges")
+    print("Finished finding Y edges")
 
     for x in range(x_min, x_max + 1):
         for y in range(y_min, y_max + 1):
             edges = edges.union(find_shell_z(temp_z, x, y))
-    print("Finished Z edges")
+    print("Finished finding Z edges")
     return edges
 
 
@@ -188,21 +149,22 @@ def write_xyz(file_name, data, print_all=False):
                 shell.write("%d %d %d\n" % (row[0], row[1], row[2]))
 
 
+# All points with the lowest Z value
 def calculate_balance_point(mat):
-    # all the points with the lowest Z value
     z_min = mat[mat[:, 2].argsort()][0][2]
     temp = mat[mat[:, 2] == z_min, :]
 
     return calculate_center_of_mass(list(temp))
 
 
+# Calculating Center of Mass from using XYZ matrix
 def calculate_center_of_mass(mat):
     xs, ys, zs = extractAxesFromMatrix(mat)
     center_of_mass = average_axes(xs, ys, zs)
 
     return center_of_mass
 
-
+# Calculating the new Center of Mass according to the deleted voxels and the previous center of mass
 def update_center_of_mass(center_of_mass, values_to_decrease, axis_updated_len):
     for axis in range(3):
         center_of_mass[axis] *= axis_updated_len + 1
@@ -211,6 +173,7 @@ def update_center_of_mass(center_of_mass, values_to_decrease, axis_updated_len):
     return center_of_mass
 
 
+# Calculating the cutting planes coefs
 def calculate_cutting_plane(center_of_mass, balance_point):
     planes_coefs = np.subtract(center_of_mass, balance_point)
     planes_coefs[2] = 0
@@ -223,6 +186,7 @@ def calculate_cutting_plane(center_of_mass, balance_point):
     return planes_coefs_final
 
 
+# Calculating the distance of a point from a plane represented by the input planes coefs
 def distance_from_plane(planes_coefs, point):
     length_coef = math.sqrt(math.pow(planes_coefs[0], 2) + math.pow(planes_coefs[1], 2) + math.pow(planes_coefs[2], 2))
     dot_point = (planes_coefs[0] * point[0]) + (planes_coefs[1] * point[1]) + (planes_coefs[2] * point[2]) + \
@@ -230,12 +194,13 @@ def distance_from_plane(planes_coefs, point):
     return dot_point / length_coef
 
 
+# Calculating the ECoM
 def get_Ecom(current_com, balance_point, values_to_decrease, axis_updated_len):
     current_com = update_center_of_mass(current_com, values_to_decrease, axis_updated_len)
     return np.linalg.norm(np.subtract(current_com[:2], balance_point[:2])), current_com
 
 
-def remove_some_points(sorted_xyz, edges, balance_point, starting_com):
+def remove_voxels(sorted_xyz, edges, balance_point, starting_com):
     edges_array = []
     for edge in edges:
         edges_array.append([e for e in edge])
@@ -260,13 +225,9 @@ def remove_some_points(sorted_xyz, edges, balance_point, starting_com):
                 sorted_xyz[last_point_index][3] = 1
                 flag = False
                 best_alpha[:last_point_index + 1] = sorted_xyz[:last_point_index + 1]
-                print("Saving best alpha")
             counter += 1
             if counter % 3000 == 0 and counter != 0:
-                print(counter, "Ecom is: ", current_Ecom)
-        if counter > len(sorted_xyz) / 1.5:
-            print("Stopped because of number of deletions")
-            break
+                print("Deleted", counter, "voxels.", "Ecom is: ", current_Ecom)
     print("Final Ecom: ", min_Ecom)
     return sorted_xyz, best_com, best_alpha
 
@@ -274,11 +235,11 @@ def remove_some_points(sorted_xyz, edges, balance_point, starting_com):
 def optimize_center_of_mass(xyz, center_of_mass, balance_point, edges):
     planes_coefs = calculate_cutting_plane(center_of_mass, balance_point);
     sorted_xyz = sorted(xyz, key=lambda point: distance_from_plane(planes_coefs, point), reverse=True)
-    return remove_some_points(sorted_xyz, edges, balance_point, center_of_mass)
+    return remove_voxels(sorted_xyz, edges, balance_point, center_of_mass)
 
 
-def doTheThing():
-    item_name = "extruder"
+def make_it_stand():
+    item_name = str(sys.argv[1])
     xyz = get_XYZ_array_from_XYZ_file("3DFiles/Inputs/" + item_name + ".xyz")
 
     edges = list(find_shell(np.array(xyz)))
@@ -286,14 +247,14 @@ def doTheThing():
 
     balance_point = calculate_balance_point(np.array(xyz))
     center_of_mass = calculate_center_of_mass(xyz)
-    print("Before optimizing: ", center_of_mass)
+    print("Before optimizing:", center_of_mass)
 
     start_time = time.time()
     optimized_xyz, best_com, best_alpha = optimize_center_of_mass(xyz, center_of_mass, balance_point, edges)
     end_time = time.time()
-    print("After optimizing: ", best_com)
+    print("After optimizing:", best_com)
 
-    print("Optimizing Alphas took: ", end_time - start_time, "seconds")
+    print("Optimizing Alphas took:", end_time - start_time, "seconds")
 
     write_xyz("3DFiles/Outputs/" + item_name + "_com_and_balance_points.xyz", [balance_point, best_com],
               print_all=True)
@@ -301,24 +262,6 @@ def doTheThing():
 
     write_xyz("3DFiles/Outputs/" + item_name + "_best_alpha.xyz", best_alpha)
 
-    # xyz = optimizeCenterOfMass(xyz, [45, 11])
-
-
-# createOFFFile(xyz)
-# createCoMFile(xCom, yCom, zCom)
-
-# "3DFiles/stl_top.xyz"
-
-# displayResult(xCom, xs, yCom, ys, zCom, zs)  #to display in matplot
-
-# Extract the voxels that weren't "deleted" from the struct
-def extractAxesFromMatrix(xyz):
-    xs = [lst[0] for lst in xyz if lst[3]]
-    ys = [lst[1] for lst in xyz if lst[3]]
-    zs = [lst[2] for lst in xyz if lst[3]]
-    # temp = xyz[xyz[:,3]==1,:]
-    return xs, ys, zs
-
 
 if __name__ == '__main__':
-    doTheThing()
+    make_it_stand()
