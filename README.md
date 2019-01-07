@@ -18,9 +18,9 @@ python ./main.py [_The name of the xyz file which is inside 3DFiles/inputs direc
 (for example: _python ./main.py extruder_)
 
 Outputs:
-- _best_alpha contains the best inner carving pattern
-- _edges contains only the edges of the model
-- _com_and_balance_points contains the balance_point and the final CoM
+- _best_alpha file contains the best inner carving pattern
+- _edges file contains only the edges of the model
+- _com_and_balance_points file contains the balance_point and the final CoM
 
 All of which are .xyz files you can load to MeshLab
 
