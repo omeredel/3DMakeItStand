@@ -1,5 +1,4 @@
 import copy
-import json
 import math
 import sys
 import time
@@ -15,18 +14,6 @@ def extractAxesFromMatrix(xyz):
     ys = [lst[1] for lst in xyz if lst[3]]
     zs = [lst[2] for lst in xyz if lst[3]]
     return xs, ys, zs
-
-
-def getXYZArrFromJsonFile():
-    xyzArr = []
-    with open('3DFiles/torus.json') as jsonFile:
-        jsonData = json.load(jsonFile)
-        for vox in jsonData["voxels"]:
-            for i in range(10):
-                point = [int(vox["x"]), i, int(vox["z"]), 1]
-                if point not in xyzArr:
-                    xyzArr.append(point)
-    return xyzArr
 
 
 def get_XYZ_array_from_XYZ_file(fileName):
@@ -163,6 +150,7 @@ def calculate_center_of_mass(mat):
     center_of_mass = average_axes(xs, ys, zs)
 
     return center_of_mass
+
 
 # Calculating the new Center of Mass according to the deleted voxels and the previous center of mass
 def update_center_of_mass(center_of_mass, values_to_decrease, axis_updated_len):
