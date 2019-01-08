@@ -10,6 +10,8 @@ We use balance optimization as an energy minimization, improving stability by mo
 
 (This is an implementation of the ["Make It Stand: Balancing Shapes for 3D Fabrication"](https://igl.ethz.ch/projects/make-it-stand/make-it-stand-siggraph-2013-prevost-et-al.pdf) paper by Romain Prévost, Emily Whiting, Sylvain Lefebvre, Olga Sorkine-Hornung)
 
+## Example:
+![Extruder example](https://github.com/omeredel/3DMakeItStand/blob/master/extruder.gif)
 
 
 ## How to run:
