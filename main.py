@@ -246,7 +246,6 @@ def make_it_stand():
 
     write_xyz("3DFiles/Outputs/" + item_name + "_com_and_balance_points.xyz", [balance_point, best_com],
               print_all=True)
-    write_xyz("3DFiles/Outputs/" + item_name + "_final.xyz", optimized_xyz)
 
     write_xyz("3DFiles/Outputs/" + item_name + "_best_alpha.xyz", best_alpha)
 
